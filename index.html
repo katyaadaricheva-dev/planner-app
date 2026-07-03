@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Planner">
+    <link rel="manifest" id="manifestLink">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%233b72e6'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='50' fill='white'%3EP%3C/text%3E%3C/svg%3E">
     <title>Ежедневник</title>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -897,6 +902,22 @@
 </head>
 <body>
 
+<!-- ЭКРАН ВХОДА -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--bg,#f6f7f9);z-index:999;display:none;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:340px;width:100%;margin:0">
+        <div class="card-header"><h2 style="font-size:1.1rem;color:var(--text-primary)">Вход в ежедневник</h2></div>
+        <div id="loginError" style="color:var(--danger);font-size:0.82rem;margin-bottom:8px;display:none"></div>
+        <input type="email" id="loginEmail" placeholder="Email" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-size:0.85rem;margin-bottom:8px;font-family:inherit;outline:none">
+        <input type="password" id="loginPass" placeholder="Пароль" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-size:0.85rem;margin-bottom:12px;font-family:inherit;outline:none">
+        <button id="loginBtn" style="width:100%;padding:10px;border:none;border-radius:10px;background:var(--accent,#3b72e6);color:#fff;font-size:0.88rem;font-weight:600;cursor:pointer;font-family:inherit">Войти</button>
+        <button id="registerBtn" style="width:100%;padding:10px;border:none;border-radius:10px;background:transparent;color:var(--accent,#3b72e6);font-size:0.85rem;cursor:pointer;margin-top:6px;font-family:inherit">Создать аккаунт</button>
+        <div style="text-align:center;margin-top:14px;font-size:0.78rem;color:var(--text-muted)">
+            <span>Войти без регистрации</span><br>
+            <button id="anonLoginBtn" style="background:none;border:none;color:var(--accent,#3b72e6);cursor:pointer;font-size:0.78rem;text-decoration:underline;font-family:inherit">Продолжить анонимно</button>
+        </div>
+    </div>
+</div>
+
 <div class="app">
 
     <!-- ШАПКА -->
@@ -904,7 +925,9 @@
         <div class="greeting">
             <div class="date-line" id="greetingDate"></div>
         </div>
-        <div class="theme-wrapper">
+        <div style="display:flex;gap:6px;flex-shrink:0">
+            <button id="installBtn" style="display:none;width:40px;height:40px;border-radius:12px;border:1.5px solid var(--divider);background:var(--card-bg);cursor:pointer;font-size:1rem;color:var(--text-secondary);font-family:inherit" title="Установить приложение">&darr;</button>
+            <div class="theme-wrapper">
             <button class="theme-btn" id="themeBtn">Aa</button>
             <div class="theme-popup" id="themePopup">
                 <div class="theme-option" data-theme="light"><span class="theme-dot light"></span> Светлая</div>
@@ -912,6 +935,7 @@
                 <div class="theme-option" data-theme="designer"><span class="theme-dot designer"></span> Дизайнерская</div>
                 <div class="theme-option" data-theme="monochrome"><span class="theme-dot monochrome"></span> Монохромная</div>
             </div>
+        </div>
         </div>
     </header>
 
@@ -1153,6 +1177,23 @@
         return false;
     }
 
+    // Показать приложение (спрятать экран входа)
+    function showApp() {
+        const ls = document.getElementById('loginScreen');
+        if (ls) ls.style.display = 'none';
+        const app = document.querySelector('.app');
+        if (app) app.style.display = '';
+        // Сбросить ошибки
+        const err = document.getElementById('loginError');
+        if (err) { err.style.display = 'none'; err.textContent = ''; }
+    }
+
+    // Показать ошибку входа
+    function showLoginError(msg) {
+        const err = document.getElementById('loginError');
+        if (err) { err.textContent = msg; err.style.display = ''; }
+    }
+
     // Загрузить из Firebase и применить (вызывается после входа)
     async function loadFromFirebase() {
         if (!userId) return;
@@ -1160,21 +1201,19 @@
             const doc = await db.collection('planners').doc(userId).get();
             if (doc.exists) {
                 const data = doc.data().state;
-                // Если нет локальных данных, принимаем облачные
                 const localRaw = localStorage.getItem('planner_state');
                 if (!localRaw || localRaw === '{}' || !localRaw.includes('"habitList"')) {
                     Object.assign(state, data);
                     saveLocal();
                 }
             } else {
-                // Первый вход — перенести из localStorage в Firebase
                 const raw = localStorage.getItem('planner_state');
                 if (raw && raw.includes('"habitList"')) {
                     await db.collection('planners').doc(userId).set({ state: JSON.parse(JSON.stringify(state)) });
                 }
             }
             fbReady = true;
-            // Обновить UI
+            showApp();
             applyTheme(state.theme);
             renderGreeting();
             renderHabitTracker();
@@ -1185,18 +1224,120 @@
             if (taskDate) taskDate.value = todayStr();
         } catch(e) {
             fbReady = true;
+            showApp();
         }
     }
 
-    // Войти анонимно
+    // Инициализация Firebase и вход
     function initFirebase() {
-        firebase.auth().signInAnonymously()
-            .then(cred => {
-                userId = cred.user.uid;
-                return loadFromFirebase();
-            })
-            .catch(() => { fbReady = true; });
+        // Слушаем изменения статуса входа
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                loadFromFirebase();
+            } else {
+                // Не залогинены — показываем экран входа
+                const ls = document.getElementById('loginScreen');
+                if (ls) ls.style.display = 'flex';
+                // Скрываем app на время
+                const app = document.querySelector('.app');
+                if (app) app.style.display = 'none';
+                fbReady = true;
+            }
+        });
     }
+
+    // Настроить кнопки входа (вызывается после initFirebase в init)
+    function setupLoginHandlers() {
+        const emailInp = document.getElementById('loginEmail');
+        const passInp = document.getElementById('loginPass');
+        const loginBtn = document.getElementById('loginBtn');
+        const registerBtn = document.getElementById('registerBtn');
+        const anonBtn = document.getElementById('anonLoginBtn');
+
+        loginBtn.addEventListener('click', () => {
+            const email = emailInp.value.trim();
+            const pass = passInp.value;
+            if (!email || !pass) { showLoginError('Введите email и пароль'); return; }
+            firebase.auth().signInWithEmailAndPassword(email, pass)
+                .then(() => {})
+                .catch(e => showLoginError(e.message === 'There is no user record corresponding to this identifier. Please try again.'
+                    ? 'Пользователь не найден' : (e.message === 'The password is invalid or the user does not have a password.'
+                    ? 'Неверный пароль' : 'Ошибка входа: '+e.message)));
+        });
+
+        registerBtn.addEventListener('click', () => {
+            const email = emailInp.value.trim();
+            const pass = passInp.value;
+            if (!email || !pass) { showLoginError('Введите email и пароль'); return; }
+            if (pass.length < 6) { showLoginError('Пароль должен быть не менее 6 символов'); return; }
+            firebase.auth().createUserWithEmailAndPassword(email, pass)
+                .then(() => {})
+                .catch(e => showLoginError(e.message === 'The email address is already in use by another account.'
+                    ? 'Этот email уже зарегистрирован' : 'Ошибка: '+e.message));
+        });
+
+        anonBtn.addEventListener('click', () => {
+            firebase.auth().signInAnonymously()
+                .then(() => {})
+                .catch(e => showLoginError('Ошибка: '+e.message));
+        });
+    }
+
+    // ================================================================
+    // PWA: МАНИФЕСТ + SERVICE WORKER + УСТАНОВКА
+    // ================================================================
+
+    // Генерируем манифест на лету (чтобы не создавать отдельный JSON-файл)
+    function setupPWA() {
+        const link = document.getElementById('manifestLink');
+        if (!link) return;
+        const manifest = {
+            name: 'Ежедневник',
+            short_name: 'Planner',
+            description: 'Ежедневник с трекером привычек и задачами',
+            start_url: window.location.pathname,
+            display: 'standalone',
+            background_color: '#f6f7f9',
+            theme_color: '#3b72e6',
+            icons: [{
+                src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%233b72e6'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='50' fill='white'%3EP%3C/text%3E%3C/svg%3E",
+                sizes: '100x100',
+                type: 'image/svg+xml'
+            }]
+        };
+        const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+        link.href = URL.createObjectURL(blob);
+
+        // Регистрируем сервис-воркер (должен лежать в той же папке что и index.html)
+        if ('serviceWorker' in navigator) {
+            const swUrl = window.location.pathname.replace(/[^/]*$/, '') + 'sw.js';
+            navigator.serviceWorker.register(swUrl).catch(() => {});
+        }
+    }
+
+    // Кнопка «Установить» (для Android Chrome)
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Показываем кнопку установки (в шапке)
+        const btn = document.getElementById('installBtn');
+        if (btn) btn.style.display = '';
+    });
+
+    // Обработчик кнопки установки
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('installBtn');
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const result = await deferredPrompt.userChoice;
+            if (result.outcome === 'accepted') btn.style.display = 'none';
+            deferredPrompt = null;
+        });
+    });
 
     // ================================================================
     // ТЕМЫ
@@ -1974,7 +2115,9 @@
         renderHabitTracker();
         periodTabs.forEach(t => t.classList.toggle('active', t.dataset.period === state.period));
         renderCurrentView();
-        // Инициализируем Firebase (анонимный вход → загрузка из облака)
+        // PWA: манифест + service worker
+        setupPWA();
+        // Firebase и вход
         initFirebase();
 
         // Заметки
@@ -2013,6 +2156,9 @@
         });
         // Закрытие по клику вне модала
         habitModal.addEventListener('click', (e) => { if (e.target === habitModal) closeHabitModal(); });
+
+        // Обработчики входа
+        setupLoginHandlers();
 
         // Обновление приветствия
         setInterval(renderGreeting, 60000);
